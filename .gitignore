@@ -1,0 +1,48 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+wappd
+wappd.exe
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# Test output
+test_output.txt
+
+# Processed media files (output from wappd)
+*_modified.*
+
+# OS-specific files
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+
+# Local test files and directories
+test_files/
+temp/
+tmp/
