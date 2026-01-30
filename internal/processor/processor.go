@@ -11,14 +11,13 @@ import (
 
 // Config holds all processor configuration
 type Config struct {
-	DateTimeOverride string
-	RegexPattern     string
-	PatternFormat    string
 	UpdateModified   bool
 	OverwriteExif    bool
 	OverrideOriginal bool
 	OutputDir        string
 	InputDir         string
+	Verbose          bool
+	DryRun           bool
 }
 
 // ProcessResult holds the result of processing a single file
@@ -55,15 +54,11 @@ func (p *Processor) ProcessFiles(filePaths []string) []ProcessResult {
 func (p *Processor) ProcessFile(filePath string) ProcessResult {
 	result := ProcessResult{InputFile: filePath}
 
-	// Extract date from filename or use override
-	dateStr := p.config.DateTimeOverride
-	if dateStr == "" {
-		var err error
-		dateStr, err = ExtractDateFromFilename(filepath.Base(filePath), p.config.RegexPattern, p.config.PatternFormat)
-		if err != nil {
-			result.Error = err
-			return result
-		}
+	// Extract date from filename
+	dateStr, err := ExtractDateFromFilename(filepath.Base(filePath))
+	if err != nil {
+		result.Error = err
+		return result
 	}
 
 	// Parse the date
@@ -77,6 +72,13 @@ func (p *Processor) ProcessFile(filePath string) ProcessResult {
 	outputPath, err := p.determineOutputPath(filePath, p.config.OutputDir)
 	if err != nil {
 		result.Error = err
+		return result
+	}
+
+	// In dry-run mode, skip all file operations
+	if p.config.DryRun {
+		result.OutputFile = outputPath
+		result.Success = true
 		return result
 	}
 
@@ -119,37 +121,10 @@ func (p *Processor) ProcessFile(filePath string) ProcessResult {
 	return result
 }
 
-// ExtractDateFromFilename extracts date using regex or pattern
-func ExtractDateFromFilename(filename, regexPattern, patternFormat string) (string, error) {
+// ExtractDateFromFilename extracts date using default WhatsApp patterns
+func ExtractDateFromFilename(filename string) (string, error) {
 	// Remove extension for pattern matching
 	nameWithoutExt := strings.TrimSuffix(filename, filepath.Ext(filename))
-
-	// Use custom regex if provided
-	if regexPattern != "" {
-		re, err := regexp.Compile(regexPattern)
-		if err != nil {
-			return "", fmt.Errorf("invalid regex pattern: %v", err)
-		}
-
-		matches := re.FindStringSubmatch(filename)
-		if len(matches) < 2 {
-			return "", fmt.Errorf("regex pattern did not match filename: %s", filename)
-		}
-
-		// Try to find named group "date"
-		for i, name := range re.SubexpNames() {
-			if name == "date" && i < len(matches) {
-				return convertDateFormat(matches[i])
-			}
-		}
-
-		return "", fmt.Errorf("regex pattern does not contain named group 'date'")
-	}
-
-	// Use custom pattern if provided
-	if patternFormat != "" {
-		return extractDateFromPattern(nameWithoutExt, patternFormat)
-	}
 
 	// Try default patterns
 	patterns := []struct {
@@ -160,7 +135,9 @@ func ExtractDateFromFilename(filename, regexPattern, patternFormat string) (stri
 		converter func(string, string) string
 	}{
 		{`IMG-(\d{8})-WA`, 1, 0, "", func(d, t string) string { ds, _ := convertDateFormat(d); return ds }},
+		{`VID-(\d{8})-WA`, 1, 0, "", func(d, t string) string { ds, _ := convertDateFormat(d); return ds }},
 		{`WhatsApp Image (\d{4}-\d{2}-\d{2}) at (\d{1,2}\.\d{2}\.\d{2}) (AM|PM)`, 1, 2, "3.04.05 PM", func(d, t string) string { return convertDateTimeFormat(d, t) }},
+		{`WhatsApp Video (\d{4}-\d{2}-\d{2}) at (\d{1,2}\.\d{2}\.\d{2}) (AM|PM)`, 1, 2, "3.04.05 PM", func(d, t string) string { return convertDateTimeFormat(d, t) }},
 	}
 
 	for _, pat := range patterns {
@@ -180,23 +157,6 @@ func ExtractDateFromFilename(filename, regexPattern, patternFormat string) (stri
 	}
 
 	return "", fmt.Errorf("no default pattern matched filename: %s", filename)
-}
-
-// extractDateFromPattern extracts date from custom pattern format
-func extractDateFromPattern(filename, pattern string) (string, error) {
-	// Convert pattern to regex
-	regexPattern := strings.ReplaceAll(regexp.QuoteMeta(pattern), `\{date\}`, `(\d{8})`)
-	re, err := regexp.Compile(regexPattern)
-	if err != nil {
-		return "", fmt.Errorf("invalid pattern format: %v", err)
-	}
-
-	matches := re.FindStringSubmatch(filename)
-	if len(matches) < 2 {
-		return "", fmt.Errorf("filename does not match pattern '%s': %s", pattern, filename)
-	}
-
-	return convertDateFormat(matches[1])
 }
 
 // convertDateFormat converts YYYYMMDD to YYYY-MM-DD
@@ -261,13 +221,21 @@ func addSuffixToPath(filePath string) string {
 	return nameWithoutExt + "_modified" + ext
 }
 
-// copyFile copies a file from src to dst
+// copyFile copies a file from src to dst, preserving original file permissions
 func copyFile(src, dst string) error {
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(dst, data, 0644)
+	
+	// Get original file permissions
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	
+	// Write file with original permissions
+	return os.WriteFile(dst, data, info.Mode())
 }
 
 // GetImageVideoFiles returns all image and video files in a directory
@@ -275,7 +243,7 @@ func GetImageVideoFiles(dirPath string) ([]string, error) {
 	var files []string
 	supportedExts := map[string]bool{
 		".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".bmp": true, ".webp": true,
-		".mp4": true, ".mov": true, ".avi": true, ".mkv": true, ".flv": true, ".m4v": true,
+		".mp4": true, ".mov": true, ".avi": true, ".mkv": true, ".flv": true, ".m4v": true, ".3gp": true,
 	}
 
 	err := filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {

@@ -1,0 +1,7 @@
+{
+  "updateModified": true,
+  "overwriteExif": false,
+  "overrideOriginal": false,
+  "outputDir": "./processed",
+  "verbose": false
+}
