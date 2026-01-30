@@ -30,16 +30,33 @@ jobs:
     - name: Get version info
       id: version
       run: |
+        echo "🔍 Detecting version information..."
+        echo "GITHUB_REF: $GITHUB_REF"
+        echo "GITHUB_REF_NAME: $GITHUB_REF_NAME"
+        
         if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
           VERSION=${GITHUB_REF#refs/tags/v}
+          echo "✅ Tag detected! Extracted version: $VERSION"
         else
           VERSION="dev"
+          echo "ℹ️  No tag detected, using default version: $VERSION"
         fi
+        
         GIT_COMMIT=$(git rev-parse --short HEAD)
         BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        
+        echo ""
+        echo "📦 Build Information:"
+        echo "  Version: $VERSION"
+        echo "  Git Commit: $GIT_COMMIT"
+        echo "  Build Date: $BUILD_DATE"
+        echo ""
+        
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "git_commit=$GIT_COMMIT" >> $GITHUB_OUTPUT
         echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
+        
+        echo "✅ Version info saved to outputs"
 
     - name: Build
       working-directory: ./src
@@ -48,7 +65,18 @@ jobs:
         GIT_COMMIT: ${{ steps.version.outputs.git_commit }}
         BUILD_DATE: ${{ steps.version.outputs.build_date }}
       run: |
+        echo "🔨 Building with version information..."
+        echo "  Version: $VERSION"
+        echo "  Git Commit: $GIT_COMMIT"
+        echo "  Build Date: $BUILD_DATE"
+        echo ""
+        
         go build -v -ldflags "-X github.com/apercova/wappd/version.Version=$VERSION -X github.com/apercova/wappd/version.GitCommit=$GIT_COMMIT -X github.com/apercova/wappd/version.BuildDate=$BUILD_DATE" -o wappd .
+        
+        echo ""
+        echo "✅ Build complete!"
+        echo "📋 Verifying version in binary..."
+        ./wappd -version || echo "⚠️  Could not verify version (binary might not be executable)"
 
     - name: Test
       working-directory: ./src
