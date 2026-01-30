@@ -41,8 +41,7 @@ reviews:
 
   auto_review:
     drafts: false
-    # disables review for new commits
-    auto_incremental_review: false
+    auto_incremental_review: true
     base_branches:
       - develop
 
