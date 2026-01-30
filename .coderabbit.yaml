@@ -31,11 +31,11 @@ reviews:
     - "!**/*_pb.d.ts"
 
   path_instructions:
-    - path: '**/*.go'
+    - path: 'src/**/*.go'
       instructions: >-
         Review the Go code, point out issues relative to principles of clean
         code, expressiveness, performance, and maintainability.
-    - path: 'src/test/*_test.**'
+    - path: 'src/test/**/*_test.**'
       instructions: >-
         Review the tests, point out issues relative to missing edge case and code quality.
 
