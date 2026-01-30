@@ -59,7 +59,7 @@ func (p *Processor) ProcessFile(filePath string) ProcessResult {
 	dateStr := p.config.DateTimeOverride
 	if dateStr == "" {
 		var err error
-		dateStr, err = p.extractDateFromFilename(filepath.Base(filePath))
+		dateStr, err = ExtractDateFromFilename(filepath.Base(filePath), p.config.RegexPattern, p.config.PatternFormat)
 		if err != nil {
 			result.Error = err
 			return result
@@ -67,7 +67,7 @@ func (p *Processor) ProcessFile(filePath string) ProcessResult {
 	}
 
 	// Parse the date
-	parsedDate, err := parseISODate(dateStr)
+	parsedDateTime, err := parseISODateTime(dateStr)
 	if err != nil {
 		result.Error = fmt.Errorf("invalid date format: %v", err)
 		return result
@@ -97,7 +97,7 @@ func (p *Processor) ProcessFile(filePath string) ProcessResult {
 	}
 
 	// Update EXIF data
-	if err := updateExifData(outputPath, parsedDate, p.config); err != nil {
+	if err := updateExifData(outputPath, parsedDateTime, p.config); err != nil {
 		// Attempt cleanup on failure
 		if outputPath != filePath {
 			os.Remove(outputPath)
@@ -108,7 +108,7 @@ func (p *Processor) ProcessFile(filePath string) ProcessResult {
 
 	// Update file modification time if requested
 	if p.config.UpdateModified {
-		if err := os.Chtimes(outputPath, parsedDate, parsedDate); err != nil {
+		if err := os.Chtimes(outputPath, parsedDateTime, parsedDateTime); err != nil {
 			result.Error = fmt.Errorf("failed to update modification time: %v", err)
 			return result
 		}
@@ -119,14 +119,14 @@ func (p *Processor) ProcessFile(filePath string) ProcessResult {
 	return result
 }
 
-// extractDateFromFilename extracts date using regex or pattern
-func (p *Processor) extractDateFromFilename(filename string) (string, error) {
+// ExtractDateFromFilename extracts date using regex or pattern
+func ExtractDateFromFilename(filename, regexPattern, patternFormat string) (string, error) {
 	// Remove extension for pattern matching
 	nameWithoutExt := strings.TrimSuffix(filename, filepath.Ext(filename))
 
 	// Use custom regex if provided
-	if p.config.RegexPattern != "" {
-		re, err := regexp.Compile(p.config.RegexPattern)
+	if regexPattern != "" {
+		re, err := regexp.Compile(regexPattern)
 		if err != nil {
 			return "", fmt.Errorf("invalid regex pattern: %v", err)
 		}
@@ -147,24 +147,39 @@ func (p *Processor) extractDateFromFilename(filename string) (string, error) {
 	}
 
 	// Use custom pattern if provided
-	if p.config.PatternFormat != "" {
-		return extractDateFromPattern(nameWithoutExt, p.config.PatternFormat)
+	if patternFormat != "" {
+		return extractDateFromPattern(nameWithoutExt, patternFormat)
 	}
 
-	// Default WhatsApp pattern: IMG-YYYYMMDD-WA
-	return extractDateFromWhatsAppPattern(nameWithoutExt)
-}
-
-// extractDateFromWhatsAppPattern extracts date from default WhatsApp pattern
-func extractDateFromWhatsAppPattern(filename string) (string, error) {
-	// Pattern: IMG-YYYYMMDD-WA
-	re := regexp.MustCompile(`IMG-(\d{8})-WA`)
-	matches := re.FindStringSubmatch(filename)
-	if len(matches) < 2 {
-		return "", fmt.Errorf("filename does not match WhatsApp pattern (IMG-YYYYMMDD-WA): %s", filename)
+	// Try default patterns
+	patterns := []struct {
+		regex     string
+		dateGroup int
+		timeGroup int
+		timeFormat string
+		converter func(string, string) string
+	}{
+		{`IMG-(\d{8})-WA`, 1, 0, "", func(d, t string) string { ds, _ := convertDateFormat(d); return ds }},
+		{`WhatsApp Image (\d{4}-\d{2}-\d{2}) at (\d{1,2}\.\d{2}\.\d{2}) (AM|PM)`, 1, 2, "3.04.05 PM", func(d, t string) string { return convertDateTimeFormat(d, t) }},
 	}
 
-	return convertDateFormat(matches[1])
+	for _, pat := range patterns {
+		re := regexp.MustCompile(pat.regex)
+		matches := re.FindStringSubmatch(nameWithoutExt)
+		if len(matches) > pat.dateGroup {
+			dateStr := matches[pat.dateGroup]
+			timeStr := ""
+			if pat.timeGroup > 0 && len(matches) > pat.timeGroup {
+				timeStr = matches[pat.timeGroup]
+				if pat.timeGroup+1 < len(matches) {
+					timeStr += " " + matches[pat.timeGroup+1]
+				}
+			}
+			return pat.converter(dateStr, timeStr), nil
+		}
+	}
+
+	return "", fmt.Errorf("no default pattern matched filename: %s", filename)
 }
 
 // extractDateFromPattern extracts date from custom pattern format
@@ -197,8 +212,19 @@ func convertDateFormat(dateStr string) (string, error) {
 	return fmt.Sprintf("%s-%s-%s", year, month, day), nil
 }
 
-// parseISODate parses an ISO date string (YYYY-MM-DD) to time.Time
-func parseISODate(dateStr string) (time.Time, error) {
+// convertDateTimeFormat combines date and time strings into ISO datetime
+func convertDateTimeFormat(dateStr, timeStr string) string {
+	date, _ := time.Parse("2006-01-02", dateStr)
+	tt, _ := time.Parse("3.04.05 PM", timeStr)
+	combined := time.Date(date.Year(), date.Month(), date.Day(), tt.Hour(), tt.Minute(), tt.Second(), 0, time.UTC)
+	return combined.Format("2006-01-02T15:04:05")
+}
+
+// parseISODateTime parses an ISO date or datetime string to time.Time
+func parseISODateTime(dateStr string) (time.Time, error) {
+	if strings.Contains(dateStr, "T") {
+		return time.Parse("2006-01-02T15:04:05", dateStr)
+	}
 	return time.Parse("2006-01-02", dateStr)
 }
 
