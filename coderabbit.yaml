@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+early_access: false
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: true
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: true
+  pre_merge_checks:
+    custom_checks:
+      - name: "Test Results for Major Changes"
+        mode: "warning"
+        instructions: |
+          If this PR contains major changes, verify that the PR description includes test results or testing information.
+          Pass if test results are documented or if the changes are minor.
+chat:
+  auto_reply: true
+path_filters:
+  - "src/**"
+  - "!dist/**"
+  - "!**/*.test.js"   
