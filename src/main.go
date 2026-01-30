@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/apercova/wappd/internal/processor"
+	"github.com/apercova/wappd/version"
 )
 
 func main() {
@@ -23,6 +24,7 @@ func main() {
 	outputDir := flag.String("out", "", "Output directory for processed files")
 	verbose := flag.Bool("v", false, "Verbose output (show detailed processing information)")
 	dryRun := flag.Bool("dry-run", false, "Preview changes without modifying files")
+	showVersion := flag.Bool("version", false, "Show version information")
 
 	// Set custom usage function
 	flag.Usage = func() {
@@ -74,6 +76,12 @@ func main() {
 	}
 
 	flag.Parse()
+
+	// Handle version flag
+	if *showVersion {
+		fmt.Println(version.Get().String())
+		os.Exit(0)
+	}
 
 	if *filePath != "" && *dirPath != "." {
 		log.Println("Warning: -f flag is set, -d flag will be ignored")
