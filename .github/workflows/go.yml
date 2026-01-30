@@ -15,15 +15,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for git commit hash
 
     - name: Set up Go
       uses: actions/setup-go@v4
       with:
         go-version: '1.25.6'
 
+    - name: Get version info
+      id: version
+      run: |
+        if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/v}
+        else
+          VERSION="dev"
+        fi
+        GIT_COMMIT=$(git rev-parse --short HEAD)
+        BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "git_commit=$GIT_COMMIT" >> $GITHUB_OUTPUT
+        echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
+
     - name: Build
       working-directory: ./src
-      run: go build -v ./...
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+        GIT_COMMIT: ${{ steps.version.outputs.git_commit }}
+        BUILD_DATE: ${{ steps.version.outputs.build_date }}
+      run: |
+        go build -v -ldflags "-X github.com/apercova/wappd/version.Version=$VERSION -X github.com/apercova/wappd/version.GitCommit=$GIT_COMMIT -X github.com/apercova/wappd/version.BuildDate=$BUILD_DATE" -o wappd .
 
     - name: Test
       working-directory: ./src
