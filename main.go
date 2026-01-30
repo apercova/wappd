@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"path/filepath"
 
 	"github.com/apercova/wappd/internal/processor"
 )
@@ -52,7 +53,12 @@ func main() {
 	}
 
 	for i, p := range inputPaths {
-		fmt.Printf("  %d: %s\n", i, p)
+		dateStr, err := processor.ExtractDateFromFilename(filepath.Base(p), "", "")
+		if err != nil {
+			fmt.Printf("  %d: %s (date extraction failed: %v)\n", i, p, err)
+		} else {
+			fmt.Printf("  %d: %s (%s)\n", i, p, dateStr)
+		}
 	}
 
 	config := processor.Config{
