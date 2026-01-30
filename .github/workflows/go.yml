@@ -3,6 +3,8 @@
 
 name: Go
 
+run-name: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && format('Release {0}', github.ref_name) || github.event_name == 'push' && format('Push to {0}', github.ref_name) || format('{0}', github.event_name) }}
+
 on:
   push:
     branches: [ "main" ]
